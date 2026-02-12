@@ -1,6 +1,4 @@
 import asyncio
-import html
-import re
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -93,7 +91,6 @@ KEYWORDS = [
     "фарғонага ким юряпти", "фарғонага 2киши"
 ]
 
-
 KEYWORDS = [k.lower() for k in KEYWORDS]
 
 # =================================================
@@ -101,25 +98,12 @@ KEYWORDS = [k.lower() for k in KEYWORDS]
 bot = Bot(token=API_TOKEN, parse_mode=types.ParseMode.HTML)
 dp = Dispatcher(bot)
 
-processed_messages = set()
 accepted_orders = set()
 
 
-# 🔹 Avto o‘chirish
-async def auto_delete(message: types.Message, seconds: int):
-    await asyncio.sleep(seconds)
-    try:
-        await message.delete()
-    except:
-        pass
-
-
-# 🔹 Xabar filtri
+# 🔎 Xabar tekshirish
 @dp.message_handler(chat_id=SOURCE_GROUP_ID, content_types=types.ContentTypes.TEXT)
 async def filter_messages(message: types.Message):
-
-    if message.message_id in processed_messages:
-        return
 
     text = message.text or ""
     text_lower = text.lower()
@@ -127,106 +111,68 @@ async def filter_messages(message: types.Message):
     if not any(k in text_lower for k in KEYWORDS):
         return
 
-    processed_messages.add(message.message_id)
-
-    original_text = message.text
-    user = message.from_user
-
-    # ================= USER MA’LUMOT =================
-
-    if user:
-        user_id = user.id
-        full_name = html.escape(user.full_name)
-
-        if user.username:
-            username = f"@{user.username}"
-        else:
-            username = full_name
-
-        profile_link = f"<a href='tg://user?id={user_id}'>Profilga o‘tish</a>"
+    # 🔗 Source xabar linki
+    if message.chat.username:
+        source_link = f"https://t.me/{message.chat.username}/{message.message_id}"
     else:
-        username = "Noma'lum"
-        profile_link = ""
+        source_link = None
 
-    # ================= TELEFON (bio ichidan) =================
-
-    phone_number = "Telefon yopiq"
-
-    try:
-        chat = await bot.get_chat(user.id)
-        if chat.bio:
-            phone_match = re.search(r'\+?\d{9,15}', chat.bio)
-            if phone_match:
-                phone_number = phone_match.group()
-    except:
-        pass
-
-    # ================= ASL XABARNI O‘CHIRISH =================
-
-    try:
-        await message.delete()
-    except:
-        pass
-
-    # ================= FOYDALANUVCHIGA JAVOB =================
-
-    info_msg = await bot.send_message(
-        SOURCE_GROUP_ID,
-        "✨ <b>Hurmatli Mijoz</b>\n\n"
-        "📨 E’lоningiz qabul qilindi.\n"
-        "🚕 Shopirlarimiz siz bilan bog‘lanadi.\n"
-        "⏳ Iltimos, kuting 😊"
+    # 📤 Forward qilish
+    forwarded_msg = await bot.forward_message(
+        chat_id=TARGET_GROUP_ID,
+        from_chat_id=SOURCE_GROUP_ID,
+        message_id=message.message_id
     )
 
-    asyncio.create_task(auto_delete(info_msg, 120))
+    # 🔘 Tugmalar
+    keyboard = InlineKeyboardMarkup()
 
-    # ================= TUGMA =================
-
-    keyboard = InlineKeyboardMarkup().add(
+    keyboard.add(
         InlineKeyboardButton(
-            "✅ Qabul qilish",
-            callback_data=f"accept:{message.message_id}"
+            "✅ Qabul qildim",
+            callback_data=f"accept:{forwarded_msg.message_id}"
         )
     )
 
-    # ================= TARGET GROUPGA YUBORISH =================
+    if source_link:
+        keyboard.add(
+            InlineKeyboardButton(
+                "🔗 Xabarga o‘tish",
+                url=source_link
+            )
+        )
 
+    # 🔧 Tugmalarni pastiga alohida xabar sifatida yuboramiz
     await bot.send_message(
         TARGET_GROUP_ID,
-        "🚖 <b>N1 TAXI SIGNAL</b>\n\n"
-        f"📝  {html.escape(original_text)}\n\n"
-        f"👤  {username}\n\n"
-        f"📞  {phone_number}\n\n"
-        f"🔗  {profile_link}",
-        reply_markup=keyboard,
-        disable_web_page_preview=True
+        "🚖 <b>N1 TAXI SIGNAL</b>",
+        reply_markup=keyboard
     )
 
 
-# 🔹 Qabul qilish
+# ✅ Qabul qilish
 @dp.callback_query_handler(lambda c: c.data.startswith("accept:"))
 async def accept_order(callback: types.CallbackQuery):
 
-    message_id = callback.data.split(":")[1]
+    msg_id = callback.data.split(":")[1]
 
-    if message_id in accepted_orders:
-        await callback.answer("Allaqachon qabul qilingan ❌", show_alert=True)
+    if msg_id in accepted_orders:
+        await callback.answer("Allaqachon olingan ❌", show_alert=True)
         return
 
-    accepted_orders.add(message_id)
+    accepted_orders.add(msg_id)
 
     user = callback.from_user
-    name = html.escape(user.full_name)
+    name = user.full_name
 
     await callback.message.edit_text(
         "🚖 <b>N1 TAXI SIGNAL</b>\n\n"
-        "✅ <b>E’lon qabul qilindi</b>\n\n"
-        f"👤 <b>{name}</b> qabul qildi"
+        f"✅ <b>{name}</b> buyurtmani qabul qildi"
     )
 
     await callback.answer("Qabul qilindi ✅")
 
 
-# 🔹 Ishga tushirish
+# 🚀 Ishga tushirish
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
