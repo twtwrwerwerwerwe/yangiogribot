@@ -1,8 +1,7 @@
 import asyncio
+import html
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-# ================== SOZLAMALAR ==================
 
 API_TOKEN = "8394542494:AAHtgNnNc7qyiZkoCByW8Sz6itqAi95VYLE"
 
@@ -93,16 +92,24 @@ KEYWORDS = [
 
 KEYWORDS = [k.lower() for k in KEYWORDS]
 
-# =================================================
-
-bot = Bot(token=API_TOKEN)
+bot = Bot(token=API_TOKEN, parse_mode=types.ParseMode.HTML)
 dp = Dispatcher(bot)
 
-accepted_orders = set()
+processed_messages = set()
+
+# 🔹 AUTO DELETE
+async def auto_delete(message: types.Message, seconds: int):
+    await asyncio.sleep(seconds)
+    try:
+        await message.delete()
+    except:
+        pass
 
 
 @dp.message_handler(chat_id=SOURCE_GROUP_ID, content_types=types.ContentTypes.TEXT)
 async def filter_messages(message: types.Message):
+    if message.message_id in processed_messages:
+        return
 
     text = message.text or ""
     text_lower = text.lower()
@@ -110,65 +117,63 @@ async def filter_messages(message: types.Message):
     if not any(k in text_lower for k in KEYWORDS):
         return
 
-    # 🔗 Source link (agar public bo‘lsa)
-    if message.chat.username:
-        source_link = f"https://t.me/{message.chat.username}/{message.message_id}"
+    processed_messages.add(message.message_id)
+
+    # 🔹 ASL MATN
+    original_text = message.text
+
+    # 🔹 USER
+    user = message.from_user
+
+    if user and user.username:
+        display_name = f"@{user.username}"
+    elif user:
+        display_name = html.escape(user.full_name)
     else:
-        source_link = None
+        display_name = "Hurmatli foydalanuvchi"
 
-    # 📤 Forward qilish
-    forwarded_msg = await bot.forward_message(
-        chat_id=TARGET_GROUP_ID,
-        from_chat_id=SOURCE_GROUP_ID,
-        message_id=message.message_id
+    # 🔹 ASL XABARNI O‘CHIRAMIZ
+    try:
+        await message.delete()
+    except:
+        pass
+
+    # 🔹 1-GURUHGA JAVOB
+    info_msg = await bot.send_message(
+        SOURCE_GROUP_ID,
+        f"✨ <b>Hurmatli Mijoz</b>\n\n"
+        "📨 E’lоningiz qabul qilindi.\n"
+        "🚕 Shopirlarimiz hozir siz bilan aloqaga chiqadi.\n"
+        "⏳ Iltimos, biroz kuting 😊"
     )
 
-    # 🔘 Tugmalar
-    keyboard = InlineKeyboardMarkup()
+    asyncio.create_task(auto_delete(info_msg, 120))  # 20 daqiqa
 
-    keyboard.add(
+    # 🔹 TUGMA
+    keyboard = InlineKeyboardMarkup().add(
         InlineKeyboardButton(
-            "✅ Qabul qildim",
-            callback_data=f"accept:{forwarded_msg.message_id}"
+            "✅ Qabul qilish",
+            callback_data=f"accept:{message.message_id}"
         )
     )
 
-    if source_link:
-        keyboard.add(
-            InlineKeyboardButton(
-                "🔗 Xabarga o‘tish",
-                url=source_link
-            )
-        )
-
-    # 🔥 MUHIM: Forward xabarni edit qilib tugma qo‘shamiz
-    await bot.edit_message_reply_markup(
-        chat_id=TARGET_GROUP_ID,
-        message_id=forwarded_msg.message_id,
+    # 🔹 2-GURUHGA YUBORISH
+    await bot.send_message(
+        TARGET_GROUP_ID,
+        "📢 <b>YANGI E’LON!</b>\n\n"
+        f"📝 <b>Matn:</b>\n{html.escape(original_text)}",
         reply_markup=keyboard
     )
 
 
 @dp.callback_query_handler(lambda c: c.data.startswith("accept:"))
 async def accept_order(callback: types.CallbackQuery):
-
-    msg_id = callback.data.split(":")[1]
-
-    if msg_id in accepted_orders:
-        await callback.answer("Allaqachon olingan ❌", show_alert=True)
-        return
-
-    accepted_orders.add(msg_id)
-
     user = callback.from_user
-    name = user.full_name
+    name = html.escape(user.full_name)
 
-    await callback.message.edit_caption(
-        caption=f"✅ {name} buyurtmani qabul qildi",
-        reply_markup=None
-    ) if callback.message.caption else await callback.message.edit_text(
-        f"✅ {name} buyurtmani qabul qildi",
-        reply_markup=None
+    await callback.message.edit_text(
+        "✅ <b>E’lon qabul qilindi</b>\n\n"
+        f"👤 <b>{name}</b> qabul qildi"
     )
 
     await callback.answer("Qabul qilindi ✅")
