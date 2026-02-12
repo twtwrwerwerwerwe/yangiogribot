@@ -95,13 +95,12 @@ KEYWORDS = [k.lower() for k in KEYWORDS]
 
 # =================================================
 
-bot = Bot(token=API_TOKEN, parse_mode=types.ParseMode.HTML)
+bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
 accepted_orders = set()
 
 
-# 🔎 Xabar tekshirish
 @dp.message_handler(chat_id=SOURCE_GROUP_ID, content_types=types.ContentTypes.TEXT)
 async def filter_messages(message: types.Message):
 
@@ -111,7 +110,7 @@ async def filter_messages(message: types.Message):
     if not any(k in text_lower for k in KEYWORDS):
         return
 
-    # 🔗 Source xabar linki
+    # 🔗 Source link (agar public bo‘lsa)
     if message.chat.username:
         source_link = f"https://t.me/{message.chat.username}/{message.message_id}"
     else:
@@ -142,15 +141,14 @@ async def filter_messages(message: types.Message):
             )
         )
 
-    # 🔧 Tugmalarni pastiga alohida xabar sifatida yuboramiz
-    await bot.send_message(
-        TARGET_GROUP_ID,
-        "🚖 <b>N1 TAXI SIGNAL</b>",
+    # 🔥 MUHIM: Forward xabarni edit qilib tugma qo‘shamiz
+    await bot.edit_message_reply_markup(
+        chat_id=TARGET_GROUP_ID,
+        message_id=forwarded_msg.message_id,
         reply_markup=keyboard
     )
 
 
-# ✅ Qabul qilish
 @dp.callback_query_handler(lambda c: c.data.startswith("accept:"))
 async def accept_order(callback: types.CallbackQuery):
 
@@ -165,14 +163,16 @@ async def accept_order(callback: types.CallbackQuery):
     user = callback.from_user
     name = user.full_name
 
-    await callback.message.edit_text(
-        "🚖 <b>N1 TAXI SIGNAL</b>\n\n"
-        f"✅ <b>{name}</b> buyurtmani qabul qildi"
+    await callback.message.edit_caption(
+        caption=f"✅ {name} buyurtmani qabul qildi",
+        reply_markup=None
+    ) if callback.message.caption else await callback.message.edit_text(
+        f"✅ {name} buyurtmani qabul qildi",
+        reply_markup=None
     )
 
     await callback.answer("Qabul qilindi ✅")
 
 
-# 🚀 Ishga tushirish
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
