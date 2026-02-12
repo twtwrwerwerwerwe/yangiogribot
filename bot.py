@@ -1,7 +1,10 @@
 import asyncio
 import html
+import re
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+# ================== SOZLAMALAR ==================
 
 API_TOKEN = "8394542494:AAHtgNnNc7qyiZkoCByW8Sz6itqAi95VYLE"
 
@@ -90,14 +93,19 @@ KEYWORDS = [
     "фарғонага ким юряпти", "фарғонага 2киши"
 ]
 
+
 KEYWORDS = [k.lower() for k in KEYWORDS]
+
+# =================================================
 
 bot = Bot(token=API_TOKEN, parse_mode=types.ParseMode.HTML)
 dp = Dispatcher(bot)
 
 processed_messages = set()
+accepted_orders = set()
 
-# 🔹 AUTO DELETE
+
+# 🔹 Avto o‘chirish
 async def auto_delete(message: types.Message, seconds: int):
     await asyncio.sleep(seconds)
     try:
@@ -106,8 +114,10 @@ async def auto_delete(message: types.Message, seconds: int):
         pass
 
 
+# 🔹 Xabar filtri
 @dp.message_handler(chat_id=SOURCE_GROUP_ID, content_types=types.ContentTypes.TEXT)
 async def filter_messages(message: types.Message):
+
     if message.message_id in processed_messages:
         return
 
@@ -119,37 +129,59 @@ async def filter_messages(message: types.Message):
 
     processed_messages.add(message.message_id)
 
-    # 🔹 ASL MATN
     original_text = message.text
-
-    # 🔹 USER
     user = message.from_user
 
-    if user and user.username:
-        display_name = f"@{user.username}"
-    elif user:
-        display_name = html.escape(user.full_name)
-    else:
-        display_name = "Hurmatli foydalanuvchi"
+    # ================= USER MA’LUMOT =================
 
-    # 🔹 ASL XABARNI O‘CHIRAMIZ
+    if user:
+        user_id = user.id
+        full_name = html.escape(user.full_name)
+
+        if user.username:
+            username = f"@{user.username}"
+        else:
+            username = full_name
+
+        profile_link = f"<a href='tg://user?id={user_id}'>Profilga o‘tish</a>"
+    else:
+        username = "Noma'lum"
+        profile_link = ""
+
+    # ================= TELEFON (bio ichidan) =================
+
+    phone_number = "Telefon yopiq"
+
+    try:
+        chat = await bot.get_chat(user.id)
+        if chat.bio:
+            phone_match = re.search(r'\+?\d{9,15}', chat.bio)
+            if phone_match:
+                phone_number = phone_match.group()
+    except:
+        pass
+
+    # ================= ASL XABARNI O‘CHIRISH =================
+
     try:
         await message.delete()
     except:
         pass
 
-    # 🔹 1-GURUHGA JAVOB
+    # ================= FOYDALANUVCHIGA JAVOB =================
+
     info_msg = await bot.send_message(
         SOURCE_GROUP_ID,
-        f"✨ <b>Hurmatli Mijoz</b>\n\n"
+        "✨ <b>Hurmatli Mijoz</b>\n\n"
         "📨 E’lоningiz qabul qilindi.\n"
-        "🚕 Shopirlarimiz hozir siz bilan aloqaga chiqadi.\n"
-        "⏳ Iltimos, biroz kuting 😊"
+        "🚕 Shopirlarimiz siz bilan bog‘lanadi.\n"
+        "⏳ Iltimos, kuting 😊"
     )
 
-    asyncio.create_task(auto_delete(info_msg, 120))  # 20 daqiqa
+    asyncio.create_task(auto_delete(info_msg, 120))
 
-    # 🔹 TUGMA
+    # ================= TUGMA =================
+
     keyboard = InlineKeyboardMarkup().add(
         InlineKeyboardButton(
             "✅ Qabul qilish",
@@ -157,21 +189,37 @@ async def filter_messages(message: types.Message):
         )
     )
 
-    # 🔹 2-GURUHGA YUBORISH
+    # ================= TARGET GROUPGA YUBORISH =================
+
     await bot.send_message(
         TARGET_GROUP_ID,
-        "📢 <b>YANGI E’LON!</b>\n\n"
-        f"📝 <b>Matn:</b>\n{html.escape(original_text)}",
-        reply_markup=keyboard
+        "🚖 <b>N1 TAXI SIGNAL</b>\n\n"
+        f"📝  {html.escape(original_text)}\n\n"
+        f"👤  {username}\n\n"
+        f"📞  {phone_number}\n\n"
+        f"🔗  {profile_link}",
+        reply_markup=keyboard,
+        disable_web_page_preview=True
     )
 
 
+# 🔹 Qabul qilish
 @dp.callback_query_handler(lambda c: c.data.startswith("accept:"))
 async def accept_order(callback: types.CallbackQuery):
+
+    message_id = callback.data.split(":")[1]
+
+    if message_id in accepted_orders:
+        await callback.answer("Allaqachon qabul qilingan ❌", show_alert=True)
+        return
+
+    accepted_orders.add(message_id)
+
     user = callback.from_user
     name = html.escape(user.full_name)
 
     await callback.message.edit_text(
+        "🚖 <b>N1 TAXI SIGNAL</b>\n\n"
         "✅ <b>E’lon qabul qilindi</b>\n\n"
         f"👤 <b>{name}</b> qabul qildi"
     )
@@ -179,5 +227,6 @@ async def accept_order(callback: types.CallbackQuery):
     await callback.answer("Qabul qilindi ✅")
 
 
+# 🔹 Ishga tushirish
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
