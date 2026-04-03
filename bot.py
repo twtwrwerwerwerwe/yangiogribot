@@ -97,7 +97,7 @@ dp = Dispatcher(bot)
 
 processed_messages = set()
 
-# 🔹 AUTO DELETE
+
 async def auto_delete(message: types.Message, seconds: int):
     await asyncio.sleep(seconds)
     try:
@@ -119,49 +119,60 @@ async def filter_messages(message: types.Message):
 
     processed_messages.add(message.message_id)
 
-    # 🔹 ASL MATN
-    original_text = message.text
-
-    # 🔹 USER
     user = message.from_user
 
-    if user and user.username:
-        display_name = f"@{user.username}"
-    elif user:
-        display_name = html.escape(user.full_name)
+    # 🔹 USER INFO
+    if user.username:
+        username = f"@{user.username}"
+        profile_link = f"https://t.me/{user.username}"
     else:
-        display_name = "Hurmatli foydalanuvchi"
+        username = "Username yo‘q"
+        profile_link = f"tg://user?id={user.id}"
 
-    # 🔹 ASL XABARNI O‘CHIRAMIZ
+    full_name = html.escape(user.full_name)
+
+    # 🔹 XABARNI O‘CHIRISH
     try:
         await message.delete()
     except:
         pass
 
-    # 🔹 1-GURUHGA JAVOB
+    # 🔹 INFO MSG (1-guruh)
     info_msg = await bot.send_message(
         SOURCE_GROUP_ID,
-        f"✨ <b>Hurmatli Mijoz</b>\n\n"
+        "✨ <b>Hurmatli Mijoz</b>\n\n"
         "📨 E’lоningiz qabul qilindi.\n"
-        "🚕 Shopirlarimiz hozir siz bilan aloqaga chiqadi.\n"
-        "⏳ Iltimos, biroz kuting 😊"
+        "🚕 Shopirlarimiz tez orada aloqaga chiqadi.\n"
+        "⏳ Iltimos, kuting 😊"
     )
 
-    asyncio.create_task(auto_delete(info_msg, 120))  # 20 daqiqa
+    asyncio.create_task(auto_delete(info_msg, 120))
 
-    # 🔹 TUGMA
-    keyboard = InlineKeyboardMarkup().add(
+    # 🔹 BUTTONS
+    keyboard = InlineKeyboardMarkup(row_width=1)
+
+    keyboard.add(
+        InlineKeyboardButton(
+            "👤 Profilga o‘tish",
+            url=profile_link
+        )
+    )
+
+    keyboard.add(
         InlineKeyboardButton(
             "✅ Qabul qilish",
             callback_data=f"accept:{message.message_id}"
         )
     )
 
-    # 🔹 2-GURUHGA YUBORISH
+    # 🔹 TARGET GROUPGA YUBORISH
     await bot.send_message(
         TARGET_GROUP_ID,
-        "📢 <b>YANGI E’LON!</b>\n\n"
-        f"📝 <b>Matn:</b>\n{html.escape(original_text)}",
+        f"📢 <b>YANGI E’LON!</b>\n\n"
+        f"👤 <b>Kim yozdi:</b> {full_name}\n"
+        f"📛 <b>Username:</b> {username}\n"
+        f"🆔 <b>ID:</b> <code>{user.id}</code>\n\n"
+        f"📝 <b>Xabar:</b>\n{html.escape(text)}",
         reply_markup=keyboard
     )
 
